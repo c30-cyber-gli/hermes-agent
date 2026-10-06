@@ -402,6 +402,15 @@ def run_bot() -> int:
         signal.signal(sig, lambda _sig, _frame: stop_flag.__setitem__("stop", True))
     # Realtime resources in one dict so teardown works however we exit.
     rt = dict(enabled=cfg.realtime, bridge=None, bridge_info=None, session=None, speaker_thread=None)
+    try:
+        from tools.browser_edge_only import blocked_backend_error, edge_only_enabled
+        edge_only = edge_only_enabled()
+    except Exception:  # fail closed: the policy module must not be bypassed by an import error
+        edge_only, blocked_backend_error = True, lambda what: f"Edge-only browser policy: refusing to start {what}."
+    if edge_only:
+        state.set(error=blocked_backend_error("Playwright Chromium for Google Meet"), exited=True)
+        sys.stderr.write(f"google_meet bot: {blocked_backend_error('Playwright Chromium for Google Meet')}\n")
+        return 3
     if rt["enabled"]:
         _setup_realtime(rt, cfg.realtime_api_key, state)
     try:

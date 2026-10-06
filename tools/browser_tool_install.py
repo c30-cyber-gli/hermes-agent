@@ -249,6 +249,9 @@ def _maybe_autoinstall_chromium() -> bool:
     ``security.allow_lazy_installs``, skipped in Docker (Chromium ships in the image), attempted once per process.
     """
     _bt = _origin()
+    from tools.browser_edge_only import edge_only_enabled
+    if edge_only_enabled():  # the real Edge is the only browser; never download a Chromium
+        return False
     if _bt._chromium_autoinstall_attempted:
         return _chromium_installed()
     _bt._chromium_autoinstall_attempted = True

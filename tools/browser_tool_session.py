@@ -166,6 +166,9 @@ def _create_local_session(task_id: str, allow_real_profile: bool = True) -> Dict
     ``allow_real_profile=False``: the user's cookie jar must not reach an arbitrary
     internal host the model chose.
     """
+    from tools.browser_edge_only import blocked_backend_error, edge_only_enabled
+    if edge_only_enabled():
+        raise RuntimeError(blocked_backend_error("a local packaged Chromium"))
     if allow_real_profile:
         cdp_url, err = _real_profile._real_profile_cdp()
         if err:
@@ -187,6 +190,9 @@ def _create_local_session(task_id: str, allow_real_profile: bool = True) -> Dict
 
 def _create_lightpanda_session(task_id: str) -> Dict[str, Any]:
     """Spawn ``lightpanda serve`` for this session key (Browser Use mode)."""
+    from tools.browser_edge_only import blocked_backend_error, edge_only_enabled
+    if edge_only_enabled():
+        raise RuntimeError(blocked_backend_error("Lightpanda"))
     from tools.browser_lightpanda import launch_lightpanda
 
     info = _session_record("lp", None, {"local": True, "lightpanda": True})
@@ -244,7 +250,11 @@ def _create_cloud_session_or_fallback(task_id: str, provider) -> Dict[str, Any]:
 
 def _create_session_for_key(task_id: str, force_local: bool) -> Dict[str, Any]:
     """Fresh session for ``task_id`` (runs OUTSIDE the lock: cloud mode makes a network call).
-    Precedence: CDP override > hybrid local sidecar (never real-profile) > cloud > local."""
+    Precedence: CDP override > hybrid local sidecar (never real-profile) > cloud > local.
+    Edge-only policy: always the real Edge, even for ``::local`` sidecar keys (raises if Edge is unavailable)."""
+    from tools.browser_edge_only import edge_only_enabled
+    if edge_only_enabled():
+        return _create_cdp_session(task_id, _cdp._get_cdp_override())
     cdp_override = _cdp._get_cdp_override()
     if cdp_override and not force_local:
         return _create_cdp_session(task_id, cdp_override)

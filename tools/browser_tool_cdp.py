@@ -54,7 +54,13 @@ def _get_cdp_override_raw() -> str:
     gates (check_fns, ``_is_local_mode`` / ``_is_local_backend``, ``hermes doctor``) MUST use this, not
     :func:`_get_cdp_override`: its 10s HTTP discovery against a stale ``cdp_url`` would stall every startup's
     schema build with no error.
+
+    Edge-only policy (``browser.edge_only``, default on): always the real-Edge endpoint, ignoring any
+    other override, so every backend attaches to Edge instead of launching its own browser.
     """
+    from tools.browser_edge_only import edge_cdp_root, edge_only_enabled
+    if edge_only_enabled():
+        return edge_cdp_root()
     env_override = os.environ.get("BROWSER_CDP_URL", "").strip()
     return env_override or _origin()._browser_cfg("cdp_url", "", lambda v: str(v or "").strip(), "browser.cdp_url from config")
 
@@ -64,8 +70,17 @@ def _get_cdp_override() -> str:
 
     May perform HTTP ``/json/version`` discovery — only call on paths about to *connect*; pure gates must use
     :func:`_get_cdp_override_raw`.
+
+    Edge-only policy: launches/verifies the real Edge and raises ``RuntimeError`` when it can't — never
+    returns "" (which would let callers fall through to a packaged Chromium or cloud browser).
     """
     _bt = _origin()
+    from tools.browser_edge_only import edge_only_enabled, ensure_real_edge_cdp
+    if edge_only_enabled():
+        root, err = ensure_real_edge_cdp()
+        if err or not root:
+            raise RuntimeError(err or "Edge-only browser policy: Microsoft Edge is unavailable.")
+        return _resolve_cdp_override(root)
     return _resolve_cdp_override(raw) if (raw := _get_cdp_override_raw()) else ""
 
 
@@ -107,7 +122,11 @@ def _ensure_cdp_supervisor(task_id: str) -> None:
     snapshots just lack ``pending_dialogs`` / ``frame_tree``.
     """
     _bt = _origin()
-    cdp_url = _get_cdp_override()
+    try:
+        cdp_url = _get_cdp_override()
+    except RuntimeError as exc:  # edge-only: Edge unavailable — the session path reports it
+        _bt.logger.debug("CDP supervisor attach for task=%s skipped: %s", task_id, exc)
+        return
     if not cdp_url:
         with _bt._cleanup_lock:
             session_info = _bt._active_sessions.get(task_id, {})

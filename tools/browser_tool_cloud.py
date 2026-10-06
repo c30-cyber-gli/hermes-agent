@@ -43,7 +43,10 @@ def _ensure_browser_plugins_loaded() -> None:
 
 
 def _get_cloud_provider() -> Optional[CloudBrowserProvider]:
-    """Return the provider cached for the active Hermes profile."""
+    """Return the provider cached for the active Hermes profile (always None under the edge-only policy)."""
+    from tools.browser_edge_only import edge_only_enabled
+    if edge_only_enabled():
+        return None
     _bt = _origin()
     scope = hermes_home_key()
     with _bt._cloud_provider_cache_lock:
@@ -167,10 +170,12 @@ def _is_local_backend() -> bool:
     SSRF protection only matters when the browser can reach networks the terminal cannot (cloud backends,
     containerized terminals). A CDP override is never trusted as local (that Chrome may live off-host) and MUST
     be checked before the Camofox short-circuit; ``_is_local_mode`` treats overrides the same way — keep the two
-    in agreement.
+    in agreement. The edge-only endpoint is the exception: it is a loopback Edge on THIS host whose binary was
+    verified, so it gets the same private-URL treatment as the local Chromium it replaces.
     """
     _bt = _origin()
-    if _cdp._get_cdp_override_raw():
+    from tools.browser_edge_only import edge_only_enabled
+    if _cdp._get_cdp_override_raw() and not edge_only_enabled():
         return False
     if _bt._is_camofox_mode():
         return True
@@ -187,8 +192,12 @@ def _get_browser_engine() -> str:
     """Return the browser engine: ``auto`` (no ``--engine`` flag), ``lightpanda`` or ``chrome``.
 
     ``browser.engine`` first, then ``AGENT_BROWSER_ENGINE``, then ``auto``; cached. Lightpanda is faster on
-    navigation but has no graphical renderer (no screenshots).
+    navigation but has no graphical renderer (no screenshots). Edge-only policy: always ``auto``, so no
+    Lightpanda session and no Lightpanda→Chrome fallback ever starts.
     """
+    from tools.browser_edge_only import edge_only_enabled
+    if edge_only_enabled():
+        return "auto"
     _bt = _origin()
     def compute() -> str:
         engine = _bt._browser_cfg("engine", "auto", lambda v: str(v).strip().lower() if v and str(v).strip() else "auto", "browser.engine from config")
@@ -232,7 +241,11 @@ def _use_real_profile() -> bool:
 
     Read on EVERY call: it is a consent switch (flipping it off must not need a restart) and each multiplexed
     profile must decide for itself. One YAML load per local session creation, so no hot-path cost.
+    Edge-only policy: off (the snapshot flow may launch a non-Edge default browser headless).
     """
+    from tools.browser_edge_only import edge_only_enabled
+    if edge_only_enabled():
+        return False
     return _origin()._browser_cfg("use_real_profile", False, bool, "use_real_profile from config")
 
 

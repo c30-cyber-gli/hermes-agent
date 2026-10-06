@@ -714,6 +714,15 @@ def _debug_candidate_paths(system: str):
 
 def get_chrome_debug_candidates(system: str) -> list[str]:
     candidates: dict[str, str] = {}  # normalized -> first path seen (dedupe, keep order)
+    edge_only = False
+    try:
+        from tools.browser_edge_only import edge_only_enabled
+        edge_only = edge_only_enabled()
+    except Exception as e:
+        logger.debug("edge-only policy lookup failed: %s", e)
+    if edge_only:  # /browser connect may only launch the real Microsoft Edge
+        edge = chromium_executable("edge", system)
+        return [edge] if edge else []
     for path in filter(None, _debug_candidate_paths(system)):
         normalized = os.path.normcase(os.path.normpath(path))
         if normalized not in candidates and os.path.isfile(path):

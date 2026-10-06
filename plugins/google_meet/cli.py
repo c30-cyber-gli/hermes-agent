@@ -203,6 +203,10 @@ def _cmd_auth() -> int:
         print("playwright is not installed. run:\n"
               "  pip install playwright && python -m playwright install chromium")
         return 1
+    from tools.browser_edge_only import blocked_backend_error, edge_only_enabled
+    if edge_only_enabled():
+        print(blocked_backend_error("Playwright Chromium for Google Meet sign-in"))
+        return 1
     path = _auth_state_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     print("opening Chromium — sign in to Google, then return here and press Enter.\n"

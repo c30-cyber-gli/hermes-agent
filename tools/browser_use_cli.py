@@ -529,7 +529,20 @@ def _route_backend(env: dict, session: str, task_id: Optional[str], local: bool)
     """Resolve where the harness connects; returns an error string or None. Real-profile consent runs
     BEFORE provider resolution so a hit short-circuits the cloud path via the BU_CDP_* env contract. Named
     sessions compose with the backend: BU_NAME namespaces the harness daemon (IPC socket, log, pid) and on
-    provider backends additionally keys its own cloud browser."""
+    provider backends additionally keys its own cloud browser.
+    Edge-only policy: the harness always attaches to the real Edge — any inherited BU_CDP_* endpoint and
+    BU cloud autospawn are discarded, and an unavailable Edge is an error, never a fallback."""
+    from tools.browser_edge_only import edge_only_enabled
+    if edge_only_enabled():
+        env.pop("BU_CDP_WS", None)
+        env.pop("BU_CDP_URL", None)
+        env.pop("BU_AUTOSPAWN", None)
+        try:
+            from tools.browser_tool_cdp import _get_cdp_override
+            _set_cdp_env(env, _get_cdp_override())
+        except Exception as e:
+            return str(e)
+        return None
     rp_err = _resolve_real_profile_cdp(env, force_local=local)
     if rp_err:
         return rp_err
@@ -641,7 +654,10 @@ def browser_exec(code: str, session: str = "", timeout_s: int = _DEFAULT_TIMEOUT
 
     # BU_AUTOSPAWN makes the CLI start a Browser Use cloud browser when no local
     # Chrome/CDP endpoint is reachable (their API key authenticates it)
-    if "BU_AUTOSPAWN" not in env and is_legacy_browser_use_cloud_config(_read_browser_cfg()):
+    from tools.browser_edge_only import edge_only_enabled
+    if edge_only_enabled():
+        env.pop("BU_AUTOSPAWN", None)
+    elif "BU_AUTOSPAWN" not in env and is_legacy_browser_use_cloud_config(_read_browser_cfg()):
         env["BU_AUTOSPAWN"] = "1"
 
     timeout = _clamp_timeout(timeout_s)

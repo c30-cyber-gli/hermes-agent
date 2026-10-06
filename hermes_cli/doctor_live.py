@@ -74,6 +74,9 @@ def _browser_available() -> bool:
 def _launch_browser_probe(timeout: float) -> tuple:
     """Launch a browser, open about:blank, close. Returns (ok, detail). Uses Playwright directly (what
     agent-browser drives underneath) so the probe owns the full lifecycle and always cleans up."""
+    from tools.browser_edge_only import edge_only_enabled
+    if edge_only_enabled():
+        return (False, "skipped: edge-only browser policy forbids launching Playwright Chromium")
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:

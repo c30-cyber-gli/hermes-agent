@@ -66,8 +66,10 @@ def lightpanda_engine_status() -> Tuple[bool, str]:
 
 
 def _lightpanda_fallback_reason(engine: str, command: str, result: Dict[str, Any]) -> Optional[str]:
-    """User-visible reason a Lightpanda result needs the Chrome fallback (copied into the result), or None."""
-    if engine != "lightpanda" or command not in _FALLBACK_ELIGIBLE:
+    """User-visible reason a Lightpanda result needs the Chrome fallback (copied into the result), or None.
+    Never under the edge-only policy: the fallback spawns a throwaway packaged Chromium."""
+    from tools.browser_edge_only import edge_only_enabled
+    if edge_only_enabled() or engine != "lightpanda" or command not in _FALLBACK_ELIGIBLE:
         return None
     if not result.get("success"):
         return f"Lightpanda {command!r} failed ({str(result.get('error') or 'command failed').strip()}); retried with Chrome."
@@ -122,6 +124,9 @@ def _run_chrome_fallback_command(task_id: str, command: str, args: List[str], ti
     Lightpanda session is ignored: fresh temp Chrome session -> same URL -> ``command`` -> tear down.
     """
     _bt = _origin()
+    from tools.browser_edge_only import blocked_backend_error, edge_only_enabled
+    if edge_only_enabled():
+        return {"success": False, "error": blocked_backend_error("a temporary Chrome fallback session")}
     import uuid
     # 1. Current URL from the Lightpanda session. ``get url`` is not fallback-eligible,
     # so this can't recurse; the explicit override strips Chromium-only env flags.
